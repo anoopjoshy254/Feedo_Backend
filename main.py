@@ -1,6 +1,5 @@
 from flask import Flask, request, jsonify
 from pymongo import MongoClient
-from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 
@@ -8,11 +7,12 @@ app = Flask(__name__)
 client = MongoClient("mongodb+srv://dbanoop:dbanoop123@cluster0.3fl6x.mongodb.net")
 db = client.mydatabase
 
-users_collection = db.users  # Access the `users` collection
+users_collection = db.users  # Access the users collection
 
 # Signup endpoint
 @app.route('/signup', methods=['POST'])
 def signup():
+    print("signup")
     data = request.json
 
     name = data.get('name')
@@ -28,13 +28,11 @@ def signup():
     if users_collection.find_one({"email": email}):
         return jsonify({"error": "User with this email already exists!"}), 400
 
-    # Hash the password for security
-    hashed_password = generate_password_hash(password)
 
     # Insert user into the database
     users_collection.insert_one({
         "name": name,
-        "password": hashed_password,
+        "password": password,
         "email": email,
         "phone_no": phone_no
     })
@@ -44,26 +42,30 @@ def signup():
 # Signin endpoint
 @app.route('/signin', methods=['POST'])
 def signin():
-    data = request.json
+    try:
+        data = request.json
 
-    # Extract data from the request
-    email = data.get('email')
-    password = data.get('password')
+        # Extract data from the request
+        email = data.get('email').strip()
+        password = data.get('password').strip()
+        print(f"Email is: {email} password: {password}")
+        # Validate required fields
+        if not email or not password:
+            return jsonify({"error": "Email and password are required!"}), 400
 
-    # Validate required fields
-    if not email or not password:
-        return jsonify({"error": "Email and password are required!"}), 400
+        # Find user in the database
+        user = users_collection.find_one({"email": email})
+        if not user:
+            return jsonify({"error": "Invalid email or password!"}), 401
 
-    # Find user in the database
-    user = users_collection.find_one({"email": email})
-    if not user:
-        return jsonify({"error": "Invalid email or password!"}), 401
+        # Verify the password
+        if user["password"] != password:
+            return jsonify({"error": "Invalid email or password!"}), 401
 
-    # Verify the password
-    if not check_password_hash(user['password'], password):
-        return jsonify({"error": "Invalid email or password!"}), 401
-
-    return jsonify({"message": "Signin successful!"}), 200
+        return jsonify({"name": user["name"], "mobile": user["phone_no"], "message": "success"})
+    except Exception as e:
+        print(f"Error during signin: {e}")
+        return jsonify({"error": "An error occurred during signin"}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)
