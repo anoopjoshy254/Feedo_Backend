@@ -60,7 +60,6 @@ def signin():
         print(f"Error during signin: {e}")
         return jsonify({"error": "An error occurred during signin"}), 500
 
-# Save schedule endpoint
 @app.route('/save_schedule', methods=['POST'])
 def save_schedule():
     try:
@@ -68,6 +67,8 @@ def save_schedule():
         time = data.get('time')
         weight = data.get('weight')
         user_email = data.get('user_email')
+        is_enabled = data.get('is_enabled', True)  # Default to True if not provided
+        duration = data.get('duration', 0)  # Default to 0 if not provided
 
         if not time or not weight or not user_email:
             return jsonify({"error": "Time, weight, and user email are required!"}), 400
@@ -79,6 +80,8 @@ def save_schedule():
             "time": time,
             "weight": weight,
             "user_email": user_email,
+            "is_enabled": is_enabled,
+            "duration": duration,
             "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         })
 
@@ -86,7 +89,6 @@ def save_schedule():
     except Exception as e:
         print(f"Error saving schedule: {e}")
         return jsonify({"error": "An error occurred while saving the schedule"}), 500
-
 # Fetch schedules endpoint
 @app.route('/get_schedules', methods=['POST'])
 def get_schedules():
@@ -97,13 +99,12 @@ def get_schedules():
         if not user_email:
             return jsonify({"error": "User email is required!"}), 400
 
-        schedules = list(schedules_collection.find({}, {"_id": 0}))
+        schedules = list(schedules_collection.find({"user_email": user_email}, {"_id": 0}))
 
         return jsonify({"schedules": schedules}), 200
     except Exception as e:
         print(f"Error fetching schedules: {e}")
         return jsonify({"error": "An error occurred while fetching schedules"}), 500
-
 # Delete schedule endpoint
 @app.route('/delete_schedule', methods=['POST'])
 def delete_schedule():
@@ -141,6 +142,25 @@ def get_feeding_history():
         return jsonify(history_list)
     except Exception as e:
         return jsonify({"error": "An error occurred while fetching feeding history"}), 500
+@app.route('/update_schedule_status', methods=['POST'])
+def update_schedule_status():
+    try:
+        data = request.json
+        schedule_id = data.get('id')
+        is_enabled = data.get('is_enabled')
+
+        if not schedule_id or is_enabled is None:
+            return jsonify({"error": "Schedule ID and status are required!"}), 400
+
+        schedules_collection.update_one(
+            {"id": schedule_id},
+            {"$set": {"is_enabled": is_enabled}}
+        )
+
+        return jsonify({"message": "Schedule status updated successfully!"}), 200
+    except Exception as e:
+        print(f"Error updating schedule status: {e}")
+        return jsonify({"error": "An error occurred while updating schedule status"}), 500
 
 # Insert Feeding History endpoint
 @app.route('/feeding-history', methods=['POST'])
