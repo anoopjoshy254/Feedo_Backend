@@ -96,50 +96,32 @@ def signin():
 def save_schedule():
     try:
         data = request.json
-        time = data.get('time')
+        time_val = data.get('time')
         weight = data.get('weight')
         user_email = data.get('user_email')
-        isEnabled = data.get('isEnabled', True)  # Default to True if not provided
+        pond_name = data.get('pond_name')  # Use pond_name instead of pond_id
+        isEnabled = data.get('isEnabled', True)  # Default true
 
-        if not time or not weight or not user_email:
-            return jsonify({"error": "Time, weight, and user email are required!"}), 400
+        if not time_val or not weight or not user_email or not pond_name:
+            return jsonify({"error": "Time, weight, user email, and pond name are required!"}), 400
 
-        existing_schedule = schedules_collection.find_one({"time": time, "user_email": user_email})
+        # Generate a unique id for the schedule.
+        schedule_id = str(uuid.uuid4())
+        schedule_doc = {
+            "id": schedule_id,
+            "pond_name": pond_name,  # Use pond_name instead of pond_id
+            "time": time_val,
+            "weight": weight,
+            "user_email": user_email,
+            "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "isEnabled": isEnabled
+        }
 
-        if existing_schedule:
-            # Update the existing schedule
-            schedules_collection.update_one(
-                {"time": time, "user_email": user_email},
-                {"$set": {"weight": weight, "isEnabled": isEnabled, "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}}
-            )
-            past_collection.update_one(
-                {"time": time, "user_email": user_email},
-                {"$set": {"weight": weight, "isEnabled": isEnabled, "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}}
-            )
-            message = "Schedule updated successfully!"
-        
-            # Insert new schedule
-            schedule_id = str(uuid.uuid4())
-            schedules_collection.insert_one({
-                "id": schedule_id,
-                "time": time,
-                "weight": weight,
-                "user_email": user_email,
-                "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "isEnabled": isEnabled
-            })
-            past_collection.insert_one({
-                "id": schedule_id,
-                "time": time,
-                "weight": weight,
-                "user_email": user_email,
-                "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "isEnabled": isEnabled
-            })
-            message = "Schedule saved successfully!"
-            
-        schedule_alarm(time, weight)
-        return jsonify({"message": message}), 201
+        schedules_collection.insert_one(schedule_doc)
+
+        # Schedule the feeding process as before.
+        schedule_alarm(time_val, weight)
+        return jsonify({"message": "Schedule saved successfully!"}), 201
     except Exception as e:
         print(f"Error saving schedule: {e}")
         return jsonify({"error": "An error occurred while saving the schedule"}), 500
@@ -192,6 +174,16 @@ def get_schedules():
     except Exception as e:
         print(f"Error fetching schedules: {e}")
         return jsonify({"error": "An error occurred while fetching schedules"}), 500
+
+@app.route('/get_schedules/<pond_name>', methods=['GET'])
+def get_schedules_by_pond(pond_name):
+    try:
+        schedules = list(schedules_collection.find({"pond_name": pond_name}, {"_id": 0}))
+        return jsonify({"schedules": schedules}), 200
+    except Exception as e:
+        print(f"Error fetching schedules: {e}")
+        return jsonify({"error": "An error occurred while fetching schedules"}), 500
+
 # Delete schedule endpoint
 @app.route('/delete_schedule', methods=['POST'])
 def delete_schedule():
@@ -326,7 +318,28 @@ def edit_feeding_history(time):
         return jsonify({"message": "Feeding history updated successfully!"}), 200
     except Exception as e:
         return jsonify({"error": "An error occurred while updating feeding history"}), 500
+@app.route('/update_feeding_history', methods=['PUT'])
+def update_feeding_history():
+    try:
+        data = request.json
+        time = data.get('time')
+        weight = data.get('weight')
+        user_email = data.get('user_email')
+        date = data.get('date')
 
+        # Update feeding history
+        result = feeding_history_collection.update_one(
+            {"time": time},
+            {"$set": {
+                "weight": weight,
+                "user_email": user_email,
+                "date": date
+            }}
+        )
+
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 import os   
 
 @app.route('/start_feeding', methods=['GET'])
@@ -348,6 +361,42 @@ def stop_feeding():
         return jsonify({"error": str(e)}), 500
     
 
+# New endpoint for adding a pond
+@app.route('/add_pond', methods=['POST'])
+def add_pond():
+    try:
+        data = request.json
+        pond_name = data.get('pond_name')
+        feeder_id = data.get('feeder_id')
+        breed_type = data.get('breed_type')
+
+        if not pond_name or not feeder_id or not breed_type:
+            return jsonify({"error": "Pond name, feeder id, and breed type are required!"}), 400
+
+        pond = {
+            "pond_name": pond_name,
+            "feeder_id": feeder_id,
+            "breed_type": breed_type,
+            "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+
+        ponds_collection = db.ponds  # Use or create a new collection for ponds
+        ponds_collection.insert_one(pond)
+
+        return jsonify({"message": "Pond added successfully!"}), 201
+    except Exception as e:
+        print(f"Error adding pond: {e}")
+        return jsonify({"error": "An error occurred while adding the pond"}), 500
+    
+@app.route('/get_ponds', methods=['GET'])
+def get_ponds():
+    try:
+        ponds = list(db.ponds.find({}))
+        ponds = [{"pond_name": pond["pond_name"], "feeder_id": pond["feeder_id"], "breed_type": pond["breed_type"], "_id": str(pond["_id"])} for pond in ponds]
+        return jsonify(ponds), 200
+    except Exception as e:
+        print(f"Error fetching ponds: {e}")
+        return jsonify({"error": "An error occurred while fetching ponds"}), 500
 
 
 app.run(host='0.0.0.0', port=5000, debug=True)
