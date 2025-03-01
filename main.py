@@ -99,28 +99,24 @@ def save_schedule():
         time_val = data.get('time')
         weight = data.get('weight')
         user_email = data.get('user_email')
-        pond_name = data.get('pond_name')  # Use pond_name instead of pond_id
-        isEnabled = data.get('isEnabled', True)  # Default true
-
+        pond_name = data.get('pond_name')  # Now storing pond name for later filtering
+        isEnabled = data.get('isEnabled', True)
         if not time_val or not weight or not user_email or not pond_name:
             return jsonify({"error": "Time, weight, user email, and pond name are required!"}), 400
 
-        # Generate a unique id for the schedule.
         schedule_id = str(uuid.uuid4())
         schedule_doc = {
             "id": schedule_id,
-            "pond_name": pond_name,  # Use pond_name instead of pond_id
+            "pond_name": pond_name,
             "time": time_val,
             "weight": weight,
             "user_email": user_email,
             "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "isEnabled": isEnabled
         }
-
         schedules_collection.insert_one(schedule_doc)
-
-        # Schedule the feeding process as before.
-        schedule_alarm(time_val, weight)
+        # Call new schedule_alarm with all parameters so that the completed schedule is recorded.
+        schedule_alarm(time_val, weight, user_email, pond_name)
         return jsonify({"message": "Schedule saved successfully!"}), 201
     except Exception as e:
         print(f"Error saving schedule: {e}")
@@ -134,19 +130,41 @@ def run_script(script_name):
     except Exception as e:
         print(f"Error executing {script_name}: {e}")
 
-def schedule_alarm(feed_time, weight):
-    """Schedule start.py at feed_time and stop.py after weight * 30 seconds."""
+def send_notification(message):
+    # Placeholder: Replace with push integration if needed.
+    print(f"Notification: {message}")
+
+def schedule_alarm(feed_time, weight, user_email, pond_name):
+    try:
+        weight_val = int(weight)
+    except Exception as ex:
+        print("Error converting weight to int:", ex)
+        weight_val = 1
     def start_feeding():
-        print("Starting feeding process...")
+        print("Starting feeding process for pond:", pond_name)
+        send_notification(f"Feeding for pond {pond_name} started at {feed_time}")
         run_script("start.py")
-        
-        # Schedule stop.py after weight * 30 seconds
-        stop_delay = weight * 30
-        threading.Timer(stop_delay, lambda: run_script("stop.py")).start()
-    
-    # Convert feed_time (HH:MM format) to a scheduled task
+        stop_delay = weight_val * 30
+        print(f"Feeding will stop after {stop_delay} seconds.")
+        threading.Timer(stop_delay, stop_and_save).start()
+    def stop_and_save():
+        run_script("stop.py")
+        send_notification(f"Feeding for pond {pond_name} stopped")
+        past_doc = {
+            "time": feed_time,
+            "weight": weight_val,
+            "user_email": user_email,
+            "pond_name": pond_name,
+            "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+        try:
+            result = db.past_schedules.insert_one(past_doc)
+            print("Inserted past schedule with id:", result.inserted_id)
+        except Exception as ex:
+            print("Error inserting past schedule:", ex)
+    # Note: Ensure feed_time is in HH:mm format and represents a time later than current system time
     schedule.every().day.at(feed_time).do(start_feeding)
-    print(f"Feeding scheduled at {feed_time} with stop delay of {weight * 30} seconds.")
+    print(f"Feeding scheduled at {feed_time} for pond {pond_name} with stop delay of {weight_val * 30} seconds.")
 
 # Function to continuously run scheduled jobs
 def run_scheduler():
@@ -209,22 +227,22 @@ def get_feeding_history():
         
         # Create a list of dictionaries that matches the frontend Scheduledata structure
         history_list = []
-        current_time = datetime.now().strftime("%H:%M")  # Get system time in HH:MM format
-
         for record in feeding_history:
-            record_time = record.get("time", "")  # Get time from record
+            history_list.append({
+                "time": record.get("time", ""),
+                "weight": record.get("weight", 0),
+                "user_email": record.get("user_email", ""),
+                "date": record.get("date", ""),
+                "pond_name": record.get("pond_name", "")
+            })
 
-            if record_time and record_time < current_time:  
-                history_list.append({
-                    "time": record.get("time", ""),
-                    "weight": record.get("weight", 0),
-                    "user_email": record.get("user_email", ""),
-                    "date": record.get("date", "")
-                })
+        # Log the fetched history for debugging
+        print("Fetched feeding history:", history_list)
 
         # Return the feeding history in JSON format
         return jsonify(history_list)
     except Exception as e:
+        print(f"Error fetching feeding history: {e}")
         return jsonify({"error": "An error occurred while fetching feeding history"}), 500
 @app.route('/update_schedule_status', methods=['POST'])
 def update_schedule_status():
