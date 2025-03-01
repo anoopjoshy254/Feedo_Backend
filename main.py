@@ -21,6 +21,10 @@ db = client.mydatabase
 users_collection = db.users  # Access the users collection
 schedules_collection = db.schedules  # Access the schedules collection
 past_collection = db.past_schedules
+users_collection = db.users
+schedules_collection = db.schedules
+past_collection = db.past_schedules
+ponds_collection = db.ponds
 
 @app.route('/update_schedule', methods=['PUT'])
 def update_schedule():
@@ -417,7 +421,44 @@ def get_ponds():
         return jsonify({"error": "An error occurred while fetching ponds"}), 500
 
 
+
 app.run(host='0.0.0.0', port=5000, debug=True)
+
+@app.route('/get_food_level/<pond_name>', methods=['GET'])
+def get_food_level(pond_name):
+    try:
+        pond = ponds_collection.find_one({"pond_name": pond_name})
+        if pond:
+            food_level = pond.get("food_level", 50)
+            return jsonify({"pond_name": pond_name, "food_level": food_level}), 200
+        else:
+            return jsonify({"error": "Pond not found"}), 404
+    except Exception as e:
+        print(f"Error fetching food level: {e}")
+        return jsonify({"error": "An error occurred while fetching food level"}), 500
+
+@app.route('/update_food_level', methods=['POST'])
+def update_food_level():
+    try:
+        data = request.json
+        pond_name = data.get('pond_name')
+        food_level = data.get('food_level')
+
+        if not pond_name or food_level is None:
+            return jsonify({"error": "Pond name and food level are required!"}), 400
+
+        result = ponds_collection.update_one(
+            {"pond_name": pond_name},
+            {"$set": {"food_level": int(food_level)}}
+        )
+
+        if result.matched_count == 0:
+            return jsonify({"error": "Pond not found"}), 404
+
+        return jsonify({"message": "Food level updated successfully!"}), 200
+    except Exception as e:
+        print(f"Error updating food level: {e}")
+        return jsonify({"error": "An error occurred while updating the food level"})
 
 
 
