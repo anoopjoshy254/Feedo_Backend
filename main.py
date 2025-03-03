@@ -391,6 +391,7 @@ def add_pond():
         pond_name = data.get('pond_name')
         feeder_id = data.get('feeder_id')
         breed_type = data.get('breed_type')
+        mail = data.get('mail')
 
         if not pond_name or not feeder_id or not breed_type:
             return jsonify({"error": "Pond name, feeder id, and breed type are required!"}), 400
@@ -399,7 +400,8 @@ def add_pond():
             "pond_name": pond_name,
             "feeder_id": feeder_id,
             "breed_type": breed_type,
-            "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "mail": mail
         }
 
         ponds_collection = db.ponds  # Use or create a new collection for ponds
@@ -413,7 +415,11 @@ def add_pond():
 @app.route('/get_ponds', methods=['GET'])
 def get_ponds():
     try:
-        ponds = list(db.ponds.find({}))
+        mail = request.args.get('mail')
+        if mail:
+            ponds = list(db.ponds.find({"mail": mail}))
+        else:
+            ponds = list(db.ponds.find({}))
         ponds = [{"pond_name": pond["pond_name"], "feeder_id": pond["feeder_id"], "breed_type": pond["breed_type"], "_id": str(pond["_id"])} for pond in ponds]
         return jsonify(ponds), 200
     except Exception as e:
