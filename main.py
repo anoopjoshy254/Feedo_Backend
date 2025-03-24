@@ -426,10 +426,6 @@ def get_ponds():
         print(f"Error fetching ponds: {e}")
         return jsonify({"error": "An error occurred while fetching ponds"}), 500
 
-
-
-app.run(host='0.0.0.0', port=5000, debug=True)
-
 @app.route('/get_food_level/<pond_name>', methods=['GET'])
 def get_food_level(pond_name):
     try:
@@ -466,19 +462,33 @@ def update_food_level():
         print(f"Error updating food level: {e}")
         return jsonify({"error": "An error occurred while updating the food level"})
 
+@app.route('/manual_feeding', methods=['POST', 'GET'])
+def manual_feeding():
+    try:
+        data = request.json
+        pond_name = data.get('pond_name')
+        weight_fed = data.get('weight_fed')
+        time_elapsed = data.get('time_elapsed')
+
+        if not pond_name or weight_fed is None or time_elapsed is None:
+            return jsonify({"error": "Pond name, weight fed, and time elapsed are required!"}), 400
+
+        # Insert manual feeding record into past_schedules
+        past_doc = {
+            "time": datetime.now().strftime("%H:%M:%S"),
+            "weight": weight_fed,
+            "user_email": "manual",  # Tagging as manual feeding
+            "pond_name": pond_name,
+            "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "manual_feeding": True,
+            "time_elapsed": time_elapsed
+        }
+        past_collection.insert_one(past_doc)
+
+        return jsonify({"message": "Manual feeding recorded successfully!"}), 200
+    except Exception as e:
+        print(f"Error during manual feeding: {e}")
+        return jsonify({"error": "An error occurred during manual feeding"}), 500
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-if __name__ == '__main__':
-    app.run(debug=True)
+app.run(host='0.0.0.0', port=5000, debug=True)
