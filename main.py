@@ -234,7 +234,7 @@ def get_feeding_history():
         for record in feeding_history:
             history_list.append({
                 "time": record.get("time", ""),
-                "weight": record.get("weight", 0),
+                "weight": float(record.get("weight", 0.0)),  # Ensure weight is returned as a decimal
                 "user_email": record.get("user_email", ""),
                 "date": record.get("date", ""),
                 "pond_name": record.get("pond_name", "")
@@ -462,7 +462,7 @@ def update_food_level():
         print(f"Error updating food level: {e}")
         return jsonify({"error": "An error occurred while updating the food level"})
 
-@app.route('/manual_feeding', methods=['POST', 'GET'])
+@app.route('/manual_feeding', methods=['POST'])
 def manual_feeding():
     try:
         data = request.json
@@ -473,17 +473,20 @@ def manual_feeding():
         if not pond_name or weight_fed is None or time_elapsed is None:
             return jsonify({"error": "Pond name, weight fed, and time elapsed are required!"}), 400
 
-        # Insert manual feeding record into past_schedules
+        # Ensure weight_fed is converted to a float before saving
         past_doc = {
             "time": datetime.now().strftime("%H:%M:%S"),
-            "weight": weight_fed,
+            "weight": float(weight_fed),  # Convert weight to float
             "user_email": "manual",  # Tagging as manual feeding
             "pond_name": pond_name,
             "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "manual_feeding": True,
             "time_elapsed": time_elapsed
         }
-        past_collection.insert_one(past_doc)
+
+        # Insert the document into the past_schedules collection
+        result = past_collection.insert_one(past_doc)
+        print(f"Manual feeding data saved with ID: {result.inserted_id}")
 
         return jsonify({"message": "Manual feeding recorded successfully!"}), 200
     except Exception as e:
